@@ -1,0 +1,20 @@
+import pandas as pd
+import numpy as np
+
+import requests
+
+
+def make_request(i, runid):
+    payload = {'i' : i,
+               'runid' : runid,
+               'teamid' : 'Coffeeblack',
+               'teampw' : '23e88f60c155804c79cfd1af83e47fc8'}
+    
+    r = requests.get("http://krabspin.uci.ru.nl/getcontext.json/", params=payload)
+    print(r.text)
+    return r.text
+
+
+def create_dataset(runid):
+    for i in range(10000):
+        make_request(i, runid)
