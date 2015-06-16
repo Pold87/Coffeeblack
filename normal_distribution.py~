@@ -1,0 +1,12 @@
+import matplotlib.pyplot as plt
+import math
+
+
+def normal_dist(x, mu, sigma):
+
+    first_part = 1 / (sigma * math.sqrt(2 * math.pi))
+    second_part = math.exp( - ( x - mu ) ** 2  / (2 * sigma  ** 2)
+    
+    return  first_part * second_part
+
+

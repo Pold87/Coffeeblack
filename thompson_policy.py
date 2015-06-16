@@ -1,0 +1,79 @@
+from scipy.stats import multivariate_normal
+
+class ThompsonSampler(MultiArmedBanditPolicy):
+
+
+    def __init__(self, arms, path="context_57.csv", epsilon=0.1, delta=0.3):
+
+        # Load context
+        self.context = create_dummies(path)
+        
+        self.d = len(self.context[0])  # Length of context
+
+        self.arms = arms  # Initalize arms
+        self.pulls = [0] * len(arms)  # Number of trials of each arm
+        self.values = [0.0] * len(arms)  # Expected reward of each arm
+
+        self.delta = 0.3  # WHAT IS THIS?!
+
+        self.t = 0  # Time steps
+
+        self.B = np.identity(self.d)
+
+        # Predictor
+        self.mu = np.zeros(self.d)
+        self.f = np.zeros(self.d)
+
+        self.R = 0.3
+        self.v = self.R * math.sqrt(
+            24 / self.epsilon * self.d * math.log(1 / self.delta))
+
+
+    def update(self, arm, reward):
+
+        """
+        Update the value of a chosen arm
+        """
+
+        # Increate pulls by one
+        self.pulls[arm] += 1
+
+        # New number of pull
+        n = self.pulls[arm]
+
+        # Old value
+        old_val = self.values[arm]
+
+        # New value (online weighted average)
+        new_val = ((n - 1) / n) * old_val + (1 / n) * reward
+
+        # Update value
+        self.values[arm] = new_val
+
+        # Update epsilon
+        self.t += 1
+        self.epsilon = self.calc_dynamic_epsilon()
+
+    def select_arm(self):
+
+        """
+        Return index of the arm we want to choose
+        """
+
+        # Sample
+
+        multivariate_normal(self.mu, self.v ** 2 * np.linalg.inverse(self.B)).rvs()
+        # np.random.multivariate_normal(self.mu, self.v ** 2 * np.linalg.inverse(self.B))
+
+        for arm in self.range(len(self.arms)):
+            pass
+        
+        
+
+        # Exploitation
+        if random.uniform(0, 1) > self.epsilon:
+            return np.argmax(self.values)
+
+        # Exploration
+        else:
+            return random.randrange(len(self.values))
