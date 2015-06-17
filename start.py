@@ -67,10 +67,6 @@ def join_df(runid):
 
     return big_df
 
-
-big_df = join_df(57)
-big_df.to_csv("context_57.csv", index=False)
-
         
 def proposepage(i, runid, header, adtype, color, productid, price):
 
@@ -125,4 +121,7 @@ adtypes = ['skyscraper', 'square', 'banner']
 colors = ['green', 'blue', 'red', 'black', 'white']
 productids = range(10, 26)
 
-# process_all_threads(88, propose_ad_thread)
+# process_all_threads(188, process_thread)
+
+big_df = join_df(188)
+big_df.to_csv("context_188.csv", index=False)

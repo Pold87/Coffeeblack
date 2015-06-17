@@ -8,6 +8,7 @@ import random
 import math
 from sklearn import preprocessing
 import scipy.stats as stats
+import matplotlib.mlab as mlab
 
 from scipy.stats import multivariate_normal
 
@@ -20,7 +21,7 @@ def logit_link(x):
     Link function for Stochastic Gradient Descent (SGD)
     """
 
-    return 1 / (1 + math.exp(-0.15 * x))
+    return 1 / (1 + math.exp(-0.01 * x))
 
 class MultiArmedBanditPolicy(object):
 
@@ -101,7 +102,18 @@ class MultiArmedBanditPolicy(object):
                                          'productid'])
 
         return df
-        
+
+
+    def create_dummy_arms_bayesian(self, df):
+
+        # Creat dummy variables
+        df = pd.get_dummies(df, columns=['adtype',
+                                         'color',
+                                         'header',
+                                         'productid'])
+
+        return df
+    
     def calc_dynamic_epsilon(self, epsilon_0=1, power_t=0.3):
 
         return epsilon_0 / (self.t ** power_t)
@@ -159,33 +171,39 @@ class ThompsonAgent(MultiArmedBanditPolicy):
 
 class LinearPolicy(MultiArmedBanditPolicy):
 
-    def __init__(self, arms):
+    def __init__(self, arms, context_path):
+
+
+
+        self.mu = 25 # for normal distribution
+        
+
+                
+
+        
 
         # Load context
-        self.context = self.create_dummy_context("context_57.csv")
+        self.context = self.create_dummy_context(context_path)
+        self.context['Age'] =  self.context['Age'] / 50.
 
         # DEBUG introduce agent again !!!
-        self.context.drop(['ID', 'Age'], axis=1, inplace=True)
-
-
-
-        # DEBUG: Select feature English only
-        # self.context = self.context[['Language_EN']]
+        self.context.drop(['ID'], axis=1, inplace=True)
         
         # Length of context
         self.d_c = len(self.context.ix[0, :])
 
         # All arm properties
-        self.df_arms = pd.DataFrame(all_arm_properties)
+        # self.df_arms = pd.DataFrame([getattr(arm, "properties") for arm in arms])
+
+        self.proporties = None
+        
+        ## Init Bayesian arms
+        self.n_arms = 1000
+        self.df_arms = self.init_bayesian_arms()
 
         # Dummy encoded arm properties
-        self.df_arm_dummies = self.create_dummy_arms(self.df_arms)
-
-        # DEBUG: price scaling
-#         self.df_arm_dummies['price'] = self.df_arm_dummies['price'] /  100.
-
-        # DEBUG: Select price only
-#         self.df_arm_dummies = self.df_arm_dummies[['price']]
+        # self.df_arm_dummies = self.create_dummy_arms(self.df_arms)
+        self.df_arm_dummies = self.create_dummy_arms_bayesian(self.df_arms)
 
         # Length of actions
         self.d_a = len(self.df_arm_dummies.ix[0, :])
@@ -209,18 +227,35 @@ class LinearPolicy(MultiArmedBanditPolicy):
 
         self.mu_hat = np.zeros(self.d).reshape(-1, 1)
         
-        self.delta = 0.9  # WHAT IS THIS?!
+        self.delta = 0.2  # WHAT IS THIS?!
 
-        self.epsilon = 0.9
+        self.epsilon = 0.4
         self.f = np.zeros(self.d).reshape(-1, 1)
         self.B = np.matrix(np.identity(self.d))
 
-        self.R = 0.9
+        self.R = 0.2
         
         self.v = self.R * math.sqrt(
             24 / self.epsilon * self.d * math.log(1 / self.delta))
 
 
+    def init_bayesian_arms(self):
+        
+        p_headers = [1/3.] * 3
+        p_adtypes = [1/3.] * 3
+        p_colors = [1/5.] * 5
+        p_productids = [1/16.] * 16
+        n = self.n_arms
+
+        arms = create_bayesian_arms(p_headers,
+                                    p_adtypes,
+                                    p_colors,
+                                    p_productids,
+                                    self.mu,
+                                    n)
+
+        return arms
+        
 
     def combine_all_context_action(self, t):
 
@@ -231,79 +266,82 @@ class LinearPolicy(MultiArmedBanditPolicy):
         return combined
 
 
+    def combine_context_bayesian_arms(self, t, n_arms):
+
+
+        p_headers = [1/3.] * 3
+        p_adtypes = [1/3.] * 3
+        p_colors = [1/5.] * 5
+        p_productids = [1/16.] * 16
+
+        arms = create_bayesian_arms(p_headers,
+                                    p_adtypes,
+                                    p_colors,
+                                    p_productids,
+                                    self.mu,
+                                    n_arms)
+
+        self.df_arms = arms
+        self.df_arm_dummies = self.create_dummy_arms_bayesian(self.df_arms)
+        
+        repeated_context = pd.DataFrame([self.context.iloc[t, :]],
+                                        index=range(n_arms))
+        
+        combined = pd.concat([repeated_context, self.df_arm_dummies], axis=1)
+
+        return combined
+        
+        
+
+
     def update(self, arm, reward, alpha=0.05, l=0.05):
 
         """
         Update the value of a chosen arm
         """
 
-        # Increate pulls by one
-        self.pulls[arm] += 1
-
-        # New number of pull
-        n = self.pulls[arm]
-
         # Get context
         context = self.context.iloc[self.t, :]
 
         # Combine with arm
+        # combined = np.append(context, self.df_arm_dummies.iloc[arm, :]).reshape(-1, 1)
+
         combined = np.append(context, self.df_arm_dummies.iloc[arm, :]).reshape(-1, 1)
-
-        # print("Combined is ", combined)
-        # print("Combined shape is ", np.shape(combined))
-
-
-        # print("REWARD", reward)
 
         # Bayes
         self.B = self.B + np.dot(context, context)
-
-        # print("f is", self.f)
         
         self.f = self.f + combined * int(bool(reward))
 
-        # print("Length is", len(self.f))
-
-        # print("f is", self.f)
-        
         self.mu_hat = np.dot(np.linalg.inv(self.B), self.f)
 
-        # print("Mu hat after update is", np.shape(self.mu_hat))
-
-        
-        # What's the probability that the customer will buy the product?
-        # probability = logit_link(np.dot(combined, self.betas))
-
-        # print("probability is", probability)
-        
-        # price = self.df_arm_dummies.ix[arm, 'price']
-
-        # print("price", price)
-
-        # Expected reward
-        # prediction = probability  * price * 10
-
-        # print("prediction", prediction)
-
-        # Loss (difference between actual reward and prediction)
-        # loss = reward - prediction
-
-        # print("loss", reward - prediction)
-
-        # Updating
-
-        #print("Update step", alpha * loss * combined)
-        
-        # self.betas = self.betas + (alpha * loss * combined)
-
-        # print("Betas are", self.betas)
-
-        # Regularization
-        # self.betas = self.betas - (alpha * 2 * l * combined)
+        self.mu = min(5, self.mu + 0.1 * (-0.5 + int(bool(reward))))
 
         # Update time step
         self.t += 1
 
+
+    def draw(self, runid, i):
+
+        """ Draw the random sample arm """
+
+        ids = {'runid': runid, 'i': i }
+
+        payload = dict(self.properties.items() + ids.items())
+
+        payload.update(credentials)  # Add credentials
+
+        # Propose page and get JSON answer
+        r = requests.get("http://krabspin.uci.ru.nl/proposePage.json/",
+                         params=payload)
+
+        r_json = r.json()['effect']
+
+        if r_json['Error'] is not None:
+            print("Error in id:", i)
+
+        return r_json['Success'] * self.properties['price']  
+        
 
     def select_arm(self):
 
@@ -312,37 +350,29 @@ class LinearPolicy(MultiArmedBanditPolicy):
         """
 
         # Chose sample from betas
-
-        # print("Variance", self.v ** 2 * np.linalg.inv(self.B))
-        # print("Variance shape", np.shape(self.v ** 2 * np.linalg.inv(self.B)))
-        # print("Mu hat", np.shape(self.mu_hat))
         
-        mu_tilde = multivariate_normal(np.squeeze(np.asarray(self.mu_hat)), self.v ** 2 * np.linalg.inv(self.B)).rvs()
+        mu_tilde = multivariate_normal(np.squeeze(np.asarray(self.mu_hat)),
+                                       self.v ** 2 * np.linalg.inv(self.B)).rvs()
 
-        # print(mu_tilde)
+        combined_context_bayesian_arms = self.combine_context_bayesian_arms(self.t, self.n_arms)
 
+        combined_context_bayesian_arms['price'] =  combined_context_bayesian_arms['price']
+
+
+        cca_numpy = combined_context_bayesian_arms.values
         
-        combined_context_action = self.combine_all_context_action(self.t)
-
-
-        # Without normalization
-        cca_numpy = combined_context_action.values
-
-
         linear_predictor = np.dot(cca_numpy, mu_tilde)
-
-        # print("Linear predictor", linear_predictor)
 
         logit_link_vec = np.vectorize(logit_link)
 
         hypotheses = logit_link_vec(linear_predictor)
 
-        hypo_with_price = np.multiply(hypotheses, self.df_arms.price.values)
-#        hypo_with_price = np.multiply(hypotheses, combined_context_action.price.values)
-
-#        print(hypo_with_price)
+        hypo_with_price = np.multiply(hypotheses, stats.norm.pdf(self.df_arms.price.values, 25, 100))
 
         bestarm = np.argmax(hypo_with_price)
+
+        self.properties = self.df_arms.iloc[bestarm, :].to_dict()
+
 #        bestarm = np.argmax(linear_predictor)
         #print(np.max(linear_predictor))
         # print("Best arm", bestarm)
@@ -395,7 +425,10 @@ def test_policy(policy, runid, ids):
 
         # Get and save reward
         print("chosen_arm:", chosen_arm)
-        reward = policy.arms[chosen_arm].draw(runid, idx)
+        # reward = policy.arms[chosen_arm].draw(runid, idx)
+
+        reward = policy.draw(runid, idx)
+        
         rewards[idx] = reward
 
         print(reward)
@@ -405,7 +438,7 @@ def test_policy(policy, runid, ids):
     results = pd.DataFrame({"chosen_arms": chosen_arms,
                             "rewards": rewards})
 
-    results.to_csv("results_ucb" + str(runid) + ".csv")
+    results.to_csv("results" + str(runid) + ".csv")
 
     return results
 
@@ -435,19 +468,66 @@ def create_all_arm_properties():
     return arms
 
 
-ids = range(3000)
-# ids = range(100)
+def create_bayesian_arms(p_headers, p_adtypes, p_colors, p_productids, mu, n):
 
-all_arm_properties = create_all_arm_properties()
-all_arms = [BanditArm(prop) for prop in all_arm_properties]
+    arms = []
+    
+    for i in range(n):
 
-# random_bandit = MultiArmedBandit(all_arms, epsilon=0.1)
-# linear_policy = LinearPolicy(all_arms)
+        header_msk = np.random.multinomial(1, p_headers)
+        headers = np.array([5, 15, 35])
+        header = headers[np.where(header_msk)][0]
 
-#thompson_policy = ThompsonAgent(all_arms)
+        adtype_msk = np.random.multinomial(1, p_adtypes)
+        adtypes = np.array(['skyscraper', 'square', 'banner'])
+        adtype = adtypes[np.where(adtype_msk)][0]
 
-#test_policy(thompson_policy, 57, ids)
+        color_msk = np.random.multinomial(1, p_colors)
+        colors = np.array(['green', 'blue', 'red', 'black', 'white'])
+        color = colors[np.where(color_msk)][0]
+
+        productid_msk = np.random.multinomial(1, p_productids)
+        productids = np.array(range(10, 26))
+        productid = productids[np.where(productid_msk)][0]
+        
+        price = float(
+            str(
+                np.around(
+                    np.min([50, 
+                    np.max(
+                        [0, np.random.normal(mu, 10)]
+                    )]),
+                    2)))
+
+        combined = {
+            'header': header,
+            'adtype': adtype,
+            'color': color, 
+            'productid': productid,
+            'price': price,
+            }
+
+        arms.append(combined)
+
+    arms_df = pd.DataFrame(arms)
+
+    return arms_df
 
 
-linear_policy = LinearPolicy(all_arms)
-test_policy(linear_policy, 57, ids)
+def main():
+
+    ids = range(10000)
+
+    all_arm_properties = create_all_arm_properties()
+    all_arms = [BanditArm(prop) for prop in all_arm_properties]
+
+    linear_policy = LinearPolicy(all_arms, "context_188.csv")
+    test_policy(linear_policy, 188, ids)
+    #big_df = join_df(57)
+    #big_df.to_csv("context_57.csv", index=False)
+
+
+
+if __name__ == "__main__":
+
+    main()

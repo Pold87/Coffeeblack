@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-runid = 5
+runid = 57
 
 df = pd.read_csv("results_ucb" + str(runid) + ".csv")
 
