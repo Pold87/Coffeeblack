@@ -32,16 +32,15 @@ def test_policy(policy, runid, ids):
     results = pd.DataFrame({"chosen_arms": chosen_arms,
                             "rewards": rewards})
 
-    results.to_csv("results" + str(runid) + ".csv")
+    results.to_csv("results/new_results" + str(runid) + "-1.csv", index=False)
 
     return results
 
 
-runid = 188
-
-df = pd.read_csv("results/results_ucb" + str(runid) + ".csv")
-
-print(df.rewards.mean())
+def calc_avg_reward(runid):
+    
+    df = pd.read_csv("results/new_results" + str(runid) + "-1.csv")
+    print(df.rewards.mean())
 
 
 def main():
@@ -51,9 +50,10 @@ def main():
     all_arm_properties = bandits.create_all_arm_properties()
     all_arms = [bandits.BanditArm(prop) for prop in all_arm_properties]
 
-    linear_policy = bandits.LinearPolicy(all_arms, "contexts/context_188.csv")
-    test_policy(linear_policy, 188, ids)
+    linear_policy = bandits.LinearPolicy(all_arms, "contexts/context_57.csv")
+    test_policy(linear_policy, 57, ids)
 
 if __name__ == "__main__":
 
+    #calc_avg_reward(57)
     main()

@@ -116,6 +116,7 @@ def propose_ad_thread(ids, runid):
     df.columns = ['Error', 'Success']
     df.to_csv("rewards" + str(runid) + "_" + str(ids[0]) + ".csv", index=False)
 
+    
 headers = [5, 15, 35]
 adtypes = ['skyscraper', 'square', 'banner']
 colors = ['green', 'blue', 'red', 'black', 'white']
@@ -123,5 +124,5 @@ productids = range(10, 26)
 
 # process_all_threads(188, process_thread)
 
-big_df = join_df(188)
-big_df.to_csv("context_188.csv", index=False)
+#big_df = join_df(188)
+#big_df.to_csv("context_188.csv", index=False)
